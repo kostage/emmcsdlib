@@ -515,7 +515,6 @@ unsigned int MMCSDWriteCmdSend(mmcsdCtrlInfo *ctrl, void *ptr, unsigned int bloc
      * Address is in blks for high cap cards and in actual bytes
      * for standard capacity cards
      */
-    if (!MMCSDWaitCardReadyForData(ctrl)) return 0;
 
     if (card->highCap)
     {
@@ -558,6 +557,8 @@ unsigned int MMCSDWriteCmdSend(mmcsdCtrlInfo *ctrl, void *ptr, unsigned int bloc
     {
         return 0;
     }
+
+    while (!MMCSDWaitCardReadyForData(ctrl));
 
     return 1;
 }
@@ -623,7 +624,7 @@ unsigned int MMCSDReadCmdSend(mmcsdCtrlInfo *ctrl, void *ptr, unsigned int block
     }
 
     /* Invalidate the data cache. */
-    CacheDataInvalidateBuff((unsigned int) ptr, (512 * nblks));
+    CacheDataInvalidateBuff((unsigned int)(ptr), 512 * nblks);
 
     return 1;
 }
