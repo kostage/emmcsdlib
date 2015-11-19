@@ -429,10 +429,10 @@ do{
 
 		  status = ctrl->xferStatusGet(ctrl);
 		  if (status == 0) return 0;
-
+#ifdef CACHE
 		  /* Invalidate the data cache. */
 		  CacheDataInvalidateBuff((unsigned int)dataBuffer, DATA_RESPONSE_WIDTH);
-
+#endif
 	}
      else
      {
@@ -524,10 +524,10 @@ unsigned int MMCSDWriteCmdSend(mmcsdCtrlInfo *ctrl, void *ptr, unsigned int bloc
     {
         address = block * card->blkLen;
     }
-
+#ifdef CACHE
     /* Clean the data cache. */
     CacheDataCleanBuff((unsigned int) ptr, (512 * nblks));
-
+#endif
     ctrl->xferSetup(ctrl, 0, ptr, 512, nblks);
 
     cmd.flags = SD_CMDRSP_WRITE | SD_CMDRSP_DATA | (ctrl->dmaEnable << SD_CMDRSP_DMAEN_OFFSET);
@@ -622,10 +622,10 @@ unsigned int MMCSDReadCmdSend(mmcsdCtrlInfo *ctrl, void *ptr, unsigned int block
     {
         return 0;
     }
-
+#ifdef CACHE
     /* Invalidate the data cache. */
     CacheDataInvalidateBuff((unsigned int)(ptr), 512 * nblks);
-
+#endif
     return 1;
 }
 
