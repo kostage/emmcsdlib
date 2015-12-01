@@ -112,6 +112,11 @@ unsigned int MMCSDBusWidthSet(mmcsdCtrlInfo *ctrl)
     {//на проверку шины положили потому что не получается нифига эта проверка)
     	//а не сделать ли нам все по спецификации и не через анус? - не сделать)
 		//если надо 4 бита
+    	if (card->sd_ver < 4)
+    	{
+    		UARTPuts("Card restricted to 1-wire wide bus mode", -1);
+    		return 1; //какие мы молодцы!
+    	}
 		if (card->busWidth & SD_BUS_WIDTH_4BIT)
 		{
 			if (ctrl->busWidth & SD_BUS_WIDTH_4BIT)
