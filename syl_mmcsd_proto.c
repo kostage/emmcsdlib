@@ -234,6 +234,7 @@ unsigned int MMCSDCardReset(mmcsdCtrlInfo *ctrl)
  * \returns  1 - Intialization is successfull.
  *           0 - Intialization is failed.
  **/
+#define RETRY 10
 unsigned int MMCSDCardInit(mmcsdCtrlInfo *ctrl)
 {
 
@@ -270,7 +271,7 @@ unsigned int MMCSDCardInit(mmcsdCtrlInfo *ctrl)
     while(HWREG(ctrl->memBase + MMCHS_SYSCTL) & MMCHS_SYSCTL_SRC);
 
    /* CMD1 - SEND_OP_COND */
-    retry = 10; //с потолка
+    retry = RETRY; //с потолка
     cmd.idx = SD_CMD(1);
     cmd.flags = 0;
     cmd.arg = 0x40ff8080;/////карта больше 2 Гб?
@@ -281,12 +282,14 @@ do{
     	card->error = 1;
     	return status; //если нет ответа, можно выходить
 	}
+	//добавил задержку для кривой eMMC СОТА
+	delay(10);
 
 } while (!(cmd.rsp[0] & ((unsigned int)BIT(31))) && retry--);
 
 	if (0xffffffff == retry) //карта до 2 Гб?
 	{
-		retry = 10; //c потолка
+		retry = RETRY; //c потолка
         cmd.arg = 0x00ff8080; //волшебная цыфорка
 		do{
 			status = ctrl->cmdSend(ctrl, &cmd);
@@ -294,11 +297,15 @@ do{
 		    	card->error = 1;
 		    	return status; //если нет ответа, можно выходить
 			}
-
+			//добавил задержку для кривой eMMC СОТА
+			delay(10);
 		} while (!(cmd.rsp[0] & ((unsigned int)BIT(31))) && retry--);
 
 	}
-	if (0xffffffff == retry) return 0;
+	if (0xffffffff == retry) {
+    	card->error = 1;
+		return 0;
+	}
 
 	//сохраняем OCR
     card->ocr = cmd.rsp[0];
