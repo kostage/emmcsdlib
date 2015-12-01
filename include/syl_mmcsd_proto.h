@@ -71,7 +71,7 @@ typedef struct _mmcsdCardInfo {
 	unsigned int blkLen;
 	unsigned int nBlks;
 	unsigned int size;
-
+	unsigned int error;
 }mmcsdCardInfo;
 
 /* Structure for command */
@@ -154,7 +154,7 @@ typedef struct _mmcsdCtrlInfo {
 #define SD_TRANSPEED_25MBPS		(0x32u)
 #define SD_TRANSPEED_50MBPS		(0x5Au)
 
-#define SD_CARD_CSD_VERSION(crd) (((crd)->raw_csd[3] & 0xC0000000) >> 30)
+#define SD_CARD_CSD_VERSION(crd) (((crd)->raw_csd[3] & 0x3C000000) >> 26)
 
 #define SD_CSD0_DEV_SIZE(csd3, csd2, csd1, csd0) (((csd2 & 0x000003FF) << 2) | ((csd1 & 0xC0000000) >> 30))
 #define SD_CSD0_MULT(csd3, csd2, csd1, csd0) ((csd1 & 0x00038000) >> 15)
@@ -213,6 +213,7 @@ typedef struct _mmcsdCtrlInfo {
 #define SD_CMD6_GRP1_SEL      0xFFFFFFF0
 #define SD_CMD6_GRP1_HS       0x1
 
+#define CARD_ERROR 2
 /*
  * Function prototypes
  */

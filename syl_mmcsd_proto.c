@@ -123,7 +123,9 @@ unsigned int MMCSDBusWidthSet(mmcsdCtrlInfo *ctrl)
 				capp.arg = 0x03B70100;
 				status = ctrl->cmdSend(ctrl, &capp);
 				if (status == 0)  return 0;
-
+				//аццки важный фикс!! без этого вылетает!
+				//ждем пока карта не снимет busy!
+		        while (!(HWREG(ctrl->memBase + MMCHS_PSTATE) & (unsigned int)BIT(20)));
 			}
 		}
 		else if (card->busWidth & SD_BUS_WIDTH_8BIT) //хотим 8 бит
@@ -175,7 +177,7 @@ unsigned int MMCSDTranSpeedSet(mmcsdCtrlInfo *ctrl)
     	//при инициализации eMMC уже была выставлена максимальная частота
     	//на которую может быть настроена карта без HS_TIMING по TRAN_SPEED из CSD
     	//теперь если highspeed = 1 делаем 48 МГц
-    	if (card->sd_ver <= 1) return 1; //карта уже на макс скорости
+    	if (card->sd_ver < 4) return 1; //карта уже на макс скорости
     	cmd.idx = SD_CMD(6);
     	cmd.flags = SD_CMDRSP_BUSY;
     	//взято из спецификации eMMC
@@ -250,7 +252,8 @@ unsigned int MMCSDCardInit(mmcsdCtrlInfo *ctrl)
 
     if (status == 0)
     {
-        return 0;
+    	card->error = 1;
+    	return 0;
     }
 
 	//mmc card initialization
@@ -270,21 +273,27 @@ unsigned int MMCSDCardInit(mmcsdCtrlInfo *ctrl)
     retry = 10; //с потолка
     cmd.idx = SD_CMD(1);
     cmd.flags = 0;
-    cmd.arg = 0x00ff8080;/////карта до 2 Гб?
+    cmd.arg = 0x40ff8080;/////карта больше 2 Гб?
     cmd.rsp[0] = 0;
 do{
 	status = ctrl->cmdSend(ctrl, &cmd);
-	if (status == 0) return status; //если нет ответа, можно выходить
+	if (status == 0) {
+    	card->error = 1;
+    	return status; //если нет ответа, можно выходить
+	}
 
 } while (!(cmd.rsp[0] & ((unsigned int)BIT(31))) && retry--);
 
-	if (0xffffffff == retry) //карта больше 2 Гб?
+	if (0xffffffff == retry) //карта до 2 Гб?
 	{
 		retry = 10; //c потолка
-        cmd.arg = 0x40ff8080; //волшебная цыфорка
+        cmd.arg = 0x00ff8080; //волшебная цыфорка
 		do{
 			status = ctrl->cmdSend(ctrl, &cmd);
-			if (status == 0) return status; //если нет ответа, можно выходить
+			if (status == 0) {
+		    	card->error = 1;
+		    	return status; //если нет ответа, можно выходить
+			}
 
 		} while (!(cmd.rsp[0] & ((unsigned int)BIT(31))) && retry--);
 
@@ -300,7 +309,10 @@ do{
     cmd.flags = SD_CMDRSP_136BITS;
     cmd.arg = 0;
 	status = ctrl->cmdSend(ctrl, &cmd);
-	if (status == 0) return status;
+	if (status == 0) {
+    	card->error = 1;
+    	return status; //если нет ответа, можно выходить
+	}
 
 	//Сохраняем CID карты
     memcpy(card->raw_cid, cmd.rsp, 16);
@@ -310,7 +322,10 @@ do{
     cmd.flags = 0;
     cmd.arg = 2 << 16;
 	status = ctrl->cmdSend(ctrl, &cmd);
-	if (status == 0) return status;
+	if (status == 0) {
+    	card->error = 1;
+    	return status; //если нет ответа, можно выходить
+	}
 
     card->rca = 2; //тупо
 
@@ -324,7 +339,10 @@ do{
      cmd.arg = card->rca << 16;
 
 		status = ctrl->cmdSend(ctrl, &cmd);
-	if (status == 0) return status;
+		if (status == 0) {
+	    	card->error = 1;
+	    	return status; //если нет ответа, можно выходить
+		}
 
      memcpy(card->raw_csd, cmd.rsp, 16);
 
@@ -348,6 +366,7 @@ do{
       	 break;
      default:
          UARTPuts("TRAN_SPEED incorrect value read", -1);
+         card->error = 1;
     	 return 0;
      }
      switch ((card->tranSpeed) >> 3) {
@@ -398,16 +417,19 @@ do{
     	 break;
      default:
          UARTPuts("TRAN_SPEED incorrect value read", -1);
+         card->error = 1;
     	 return 0;
      }
      status = ctrl->busFreqConfig(ctrl, ctrl->opClk);
 
      if (status != 0) //эта функция возвращает ноль при успехе
      {
+    	 card->error = 1;
          UARTPuts("HS MMC/SD TRAN_SPEED freqval set failed\n\r", -1);
+         return 0;
      }
     //если спецификация вер. 4.0 и выше
-     if (card->sd_ver > 1)
+     if (card->sd_ver > 3)
 	 {
          /* Send CMD7 select card */
           cmd.idx = SD_CMD(7);
@@ -415,7 +437,77 @@ do{
           cmd.arg = card->rca << 16;
 
   		status = ctrl->cmdSend(ctrl, &cmd);
- 		if (status == 0) return status;
+ 		if (status == 0) {
+ 			card->error = 1;
+ 			return status;
+ 		}
+
+#if 0 //говнокод
+ 		if ((cmd.rsp[0] & BIT(25))) //если карта залочена стираем нафиг с нее все
+ 		{
+ 			//устанавливаем длину блока 1 байт
+ 	        /* Send CMD16 */
+ 	        cmd.idx = SD_CMD(16);
+ 	        cmd.flags = 0; //ответ R1
+ 	        cmd.arg = 1; //1 байт длина блока
+ 	   		status = ctrl->cmdSend(ctrl, &cmd);
+ 	 		if (status == 0) {
+ 	 			card->error = 1;
+ 	 			return status;
+ 	 		}
+
+ 	  		dataBuffer[0] = BIT(3); //Force-erase bit
+ 	  		dataBuffer[1] = 0; //Force-erase bit
+ 	  		dataBuffer[2] = 0; //Force-erase bit
+ 	  		dataBuffer[3] = BIT(3); //Force-erase bit
+
+#ifdef CACHE
+		  /* Invalidate the data cache. */
+ 			CacheDataCleanBuff((unsigned int)dataBuffer, 4);
+#endif
+ 			ctrl->xferSetup(ctrl, 0/*0 - WRITE*/, dataBuffer, 1, 1); //Achtung! посылка одного байта
+ 			cmd.idx = SD_CMD(42);
+ 			cmd.flags = SD_CMDRSP_WRITE | SD_CMDRSP_DATA | (ctrl->dmaEnable << SD_CMDRSP_DMAEN_OFFSET);
+ 			cmd.arg = 0;
+ 			cmd.nblks = 1;
+ 			cmd.data = (signed char*)dataBuffer;
+ 			status = ctrl->cmdSend(ctrl, &cmd);
+ 	 		if (status == 0) {
+ 	 			card->error = 1;
+ 	 			return status;
+ 	 		}
+
+ 			status = ctrl->xferStatusGet(ctrl);
+
+// 			if (status == 0) return 0;
+
+ 			//проверяем статус карты
+ 	        cmd.idx = SD_CMD(13);
+ 	        cmd.flags = 0; //ответ R1
+ 	        cmd.arg = card->rca << 16; //1 байт длина блока
+ 	   		status = ctrl->cmdSend(ctrl, &cmd);
+ 	 		if (status == 0) {
+ 	 			card->error = 1;
+ 	 			return status;
+ 	 		}
+
+
+			//ждем пока карта не снимет busy!
+	        while (!(HWREG(ctrl->memBase + MMCHS_PSTATE) & (unsigned int)BIT(20)));
+
+ 			//возвращаем длину блока в нормальное состояние
+ 	        /* Send CMD16 */
+ 	        cmd.idx = SD_CMD(16);
+ 	        cmd.flags = 0; //ответ R1
+ 	        cmd.arg = 512; //512 байт длина блока
+ 	   		status = ctrl->cmdSend(ctrl, &cmd);
+ 	 		if (status == 0) {
+ 	 			card->error = 1;
+ 	 			return status;
+ 	 		}
+	  		while(1);
+ 		}
+#endif
 
     	 //надо затянуть EXT_CSD
 		  ctrl->xferSetup(ctrl, 1, dataBuffer, 512, 1);
@@ -425,10 +517,16 @@ do{
 		  cmd.nblks = 1;
 		  cmd.data = (signed char*)dataBuffer;
 		  status = ctrl->cmdSend(ctrl, &cmd);
-		  if (status == 0)  return 0;
+	 		if (status == 0) {
+	 			card->error = 1;
+	 			return status;
+	 		}
 
 		  status = ctrl->xferStatusGet(ctrl);
-		  if (status == 0) return 0;
+	 		if (status == 0) {
+	 			card->error = 1;
+	 			return status;
+	 		}
 #ifdef CACHE
 		  /* Invalidate the data cache. */
 		  CacheDataInvalidateBuff((unsigned int)dataBuffer, DATA_RESPONSE_WIDTH);
@@ -436,8 +534,7 @@ do{
 	}
      else
      {
-    	 UARTPuts("Unsupported eMMC\n\r", -1);
-    	 return 0;
+    	 UARTPuts("Old Slowpoke eMMC card\n\r", -1);
      }
 
      //разное определение размера карты для highCap карт  и обычных карт
@@ -455,10 +552,10 @@ do{
 			 cmd.arg = 512;
 			 status = ctrl->cmdSend(ctrl, &cmd);
 
-			 if (status == 0)
-			 {
-				 return 0;
-			 }
+		 		if (status == 0) {
+		 			card->error = 1;
+		 			return status;
+		 		}
 			 else
 			 {
 				 card->blkLen = 512;
@@ -488,7 +585,6 @@ do{
 		if (status == 0) return status;
 #endif
 	//end emmc initialization
-
     return 1;
 }
 
