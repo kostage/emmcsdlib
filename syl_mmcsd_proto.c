@@ -114,7 +114,7 @@ unsigned int MMCSDBusWidthSet(mmcsdCtrlInfo *ctrl)
 		//если надо 4 бита
     	if (card->sd_ver < 4)
     	{
-    		UARTPuts("Card restricted to 1-wire wide bus mode", -1);
+    		UARTPuts("Card restricted to 1-wire wide bus mode.\n", -1);
     		return 1; //какие мы молодцы!
     	}
 		if (card->busWidth & SD_BUS_WIDTH_4BIT)
@@ -253,15 +253,14 @@ unsigned int MMCSDCardInit(mmcsdCtrlInfo *ctrl)
 
     card->ctrl = ctrl;
 
-    /* CMD0 - reset card */
-    status = MMCSDCardReset(ctrl);
+	/* CMD0 - reset card */
+	status = MMCSDCardReset(ctrl);
 
-    if (status == 0)
-    {
-    	card->error = 1;
-    	return 0;
-    }
-
+	if (status == 0)
+	{
+		card->error = 1;
+		return 0;
+	}
 	//mmc card initialization
 
 
@@ -440,6 +439,7 @@ do{
          UARTPuts("HS MMC/SD TRAN_SPEED freqval set failed\n\r", -1);
          return 0;
      }
+
     //если спецификация вер. 4.0 и выше
      if (card->sd_ver > 3)
 	 {
